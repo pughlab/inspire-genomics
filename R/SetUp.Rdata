@@ -1,0 +1,34 @@
+##################
+# Configuration 
+################
+
+###########
+# Load Functions
+##########
+source ("./R/Plot.functions.R")
+
+#########
+# Variables
+#########
+outdir <- "./output"
+data.dir <- "./data"
+
+#########
+# Load Libraries
+#########
+
+options(java.parameters = "-Xmx4g" )
+library ("XLConnect")
+library ("DESeq2")
+library ("enrichR")
+library (ggplot2)
+library(scales)
+library ("pheatmap")
+library (plyr)
+library ("RColorBrewer")
+library ("GSEABase")
+library ("GSVA")
+library ("GSVAdata")
+library ("snow")
+library ("rlecuyer")
+library(vioplot)
