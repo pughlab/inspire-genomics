@@ -3,8 +3,7 @@
 # Figure1.R
 ###############
 setwd ("/Users/yangc/PughLab/Repos/inspire-genomics/")
-load (paste(getwd(),"R","Setup.R", sep = "/"))
-load (paste(getwd(),"R","Plot.Functions.R", sep = "/"))
+load (paste(getwd(),"R","PlotFunctions.R", sep = "/"))
 #############
 # Figure 1A #
 #############
