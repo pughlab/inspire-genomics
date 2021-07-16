@@ -2,11 +2,9 @@
 # Plot Fuctions
 # PlotFunctions.R
 ######
-
 # WATERFALL PLOT
 # In descending best TM, options to sort by Cohort, color by Cohort or RECIST1.1 best response
 # Return table of sample count by sort category
-
 plotWaterfall <- function(main.df, sortVar = "COHORT", barCol = "COHORT"){
   library (plyr)
   main.df[,"BEST_RECIST_TM_TARGET"] <- as.numeric(main.df[,"BEST_RECIST_TM_TARGET"])
@@ -211,7 +209,49 @@ plotGroupsWithScatter <- function (main.df, x.var, y.var, x.var.name, y.var.name
   return (box.summary)
 }
 
+# PAIRED VIOLIN PLOT WITH LINE CONNECTOR
+plotGroupsWithPairs <- function (main.df, x.var, y.var, x.var.name, y.var.name,
+                                 x.cat.order, group.colors,y.grp,
+                                 BL = "BL_IMS", TX = "TX_IMS",
+                                 y.limit = c(0.5, 2),log.scale = "", 
+                                 pch = 16, lwd = 2.5, wex = 0.8, 
+                                 custom.axis = FALSE){
+  library(vioplot)
+  library (tidyr)
+  
+  plot.formula <- as.formula (paste (y.var, x.var, sep = "~"))
+  names(group.colors) <- x.cat.order
+  main.df[,x.var] <- factor (main.df[,x.var], levels = x.cat.order)
+  
+  # get wide data pairs
+  w.data.df <- spread(data.df[,!(colnames(data.df) %in% x.var)], signature, score)
+  w.data.df <- w.data.df[!(is.na(w.data.df[,BL]) & is.na (w.data.df[,TX])),]
+  
+  box.summary <- boxplot (plot.formula, main.df, plot = FALSE)
+ 
+  vioplot (plot.formula, main.df, log = log.scale, border = group.colors, lwd = lwd, wex = wex,
+           plotCentre = "line", drawRect = TRUE, col = adjustcolor(group.colors, alpha = 0.10), 
+           ylim = y.limit, las = 1, xlab = x.var.name, ylab = y.var.name, yaxt = ifelse (custom.axis, yes = "n", no = "s"))
+  
+  justodd <- function(x) x[ x %% 2 == 1 ]
+  justeven <- function(x) x[ x %% 2 == 0]
+  stripchart(plot.formula, main.df, vertical = TRUE, add = TRUE, at = seq (1, length(box.summary$n)), pch = "o")
+  segments (x0= as.numeric(as.character(factor(as.character(w.data.df[,y.grp]), 
+                       levels = levels(w.data.df[,y.grp]), 
+                       labels = justodd (seq (1, length(box.summary$n)))))),
+            x1= as.numeric(as.character(factor(as.character(w.data.df[,y.grp]), 
+                                              levels = levels(w.data.df[,y.grp]), 
+                                              labels = justeven (seq (1, length(box.summary$n)))))),
+            y0=w.data.df[,BL], y1=w.data.df[,TX])
+  
+  axis (side = 3, at =  c(0.5,seq (1, length(box.summary$n))), labels = c("n =", box.summary$n))
+}
 
+# FOREST PLOT
+
+# GENE EXPRESSION BOXPLOT
+
+# GENE EXPRESSION BOXPLOT WITH LINE CONNECTOR
 
 
 
