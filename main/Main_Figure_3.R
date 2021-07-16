@@ -3,9 +3,9 @@
 # Figure3.R
 ###############
 setwd ("/Users/yangc/PughLab/Repos/inspire-genomics/")
-load (paste(getwd(),"R","PlotFunctions.R", sep = "/"))
-load (paste(getwd(),"R","ImmuneScoreForestPlotFunctions.R", sep = "/"))
-load (paste(getwd(),"R","ColorScheme.R", sep = "/"))
+source (paste(getwd(),"R","PlotFunctions.R", sep = "/"))
+source (paste(getwd(),"R","ImmuneScoreForestPlotFunctions.R", sep = "/"))
+source (paste(getwd(),"R","ColorScheme.R", sep = "/"))
 #############
 # Figure 3A #
 #############
