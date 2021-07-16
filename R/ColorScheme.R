@@ -27,3 +27,6 @@ COLS_PEM4 <- c("low" = "#4575b4",
                "high"= "#a50026")
 
 COLS_TMB4 <- c("black", "grey","red", "orange")
+
+COLS_CB <- c("nCB" = "black",
+             "CB" = "#d73027") 
