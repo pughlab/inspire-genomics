@@ -30,3 +30,6 @@ COLS_TMB4 <- c("black", "grey","red", "orange")
 
 COLS_CB <- c("nCB" = "black",
              "CB" = "#d73027") 
+
+COLS_CB_BOX <- c("nCB" = "grey",
+                 "CB" = "#d73027") 
