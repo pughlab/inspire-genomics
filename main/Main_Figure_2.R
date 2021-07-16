@@ -11,6 +11,7 @@ options(java.parameters = c("-XX:+UseConcMarkSweepGC", "-Xmx8192m"))
 library (XLConnect)
 library (plyr)
 data.df <- readWorksheetFromFile (sheet = "Fig. 2A", file = "./data/Source Data/SourceData_Fig2.xlsx")
+# See comut plot function
 
 #############
 # Figure 2B #
