@@ -211,7 +211,7 @@ plotGroupsWithScatter <- function (main.df, x.var, y.var, x.var.name, y.var.name
 
 # PAIRED VIOLIN PLOT WITH LINE CONNECTOR
 plotGroupsWithPairs <- function (main.df, x.var, y.var, x.var.name, y.var.name,
-                                 x.cat.order, group.colors,y.grp,
+                                 x.cat.order, group.colors,y.grp, 
                                  BL = "BL_IMS", TX = "TX_IMS",
                                  y.limit = c(0.5, 2),log.scale = "", 
                                  pch = 16, lwd = 2.5, wex = 0.8, 
@@ -247,12 +247,66 @@ plotGroupsWithPairs <- function (main.df, x.var, y.var, x.var.name, y.var.name,
   axis (side = 3, at =  c(0.5,seq (1, length(box.summary$n))), labels = c("n =", box.summary$n))
 }
 
-# FOREST PLOT
-
 # GENE EXPRESSION BOXPLOT
+plotGeneBox <- function (main.df, GOI = "", x.var="groups", y.var ="FoldChange", 
+                         x.var.name = "", y.var.name = "Delta log2(TMP+1)",
+                         x.cat.order, group.colors = rev (COLS_CB),
+                         y.limit = c(0.5, 2)){
+  make.italic <- function(x) as.expression(lapply(x, function(y) bquote(italic(.(y)))))
+  plot.formula <- as.formula (paste(y.var,x.var,sep="~"))
+  box.summary <- boxplot (plot.formula, main.df[main.df[,"Gene"] %in% GOI,], plot = FALSE)
+  boxplot (plot.formula,
+           main.df[main.df[,"Gene"] %in% GOI,],
+           boxwex = 0.50, boxlty = 1, whisklty = 1, 
+           staplelwd = 3, medcol = group.colors, frame.plot = FALSE,
+           las = 1, border = group.colors,
+           boxlwd = 0.5, outline = FALSE, 
+           ylim = y.limit, 
+           ylab = y.var.name,
+           xaxt = "n",
+           main = make.italic(GOI))
+  stripchart(plot.formula, main.df[main.df[,"Gene"] %in% GOI,],cex = 0.8,
+             vertical = TRUE, add = TRUE, pch = 1, method = "jitter", jitter = 0)
+  axis(side = 1, at = seq(1,length(box.summary$names), by = 1),labels = box.summary$names, cex.axis = 0.8,padj = 0.5)
+  axis(side = 3, at = c(0.5,seq(1,length(box.summary$names), by = 1)),labels = c("n=",box.summary$n), cex.axis = 0.8, padj = 0.5)
+  return (wilcox.test (plot.formula, main.df[main.df[,"Gene"] %in% GOI,], alternative = "two.sided"))
+}
 
 # GENE EXPRESSION BOXPLOT WITH LINE CONNECTOR
+plotGeneBoxWithPairs <- function (main.df, GOI = "PLA2G2D", x.var="groups", y.var ="log2TPM", 
+                         x.var.name = "", y.var.name = "log2(TMP+1)",y.grp,
+                         x.cat.order, group.colors, BL,TX,
+                         y.limit = c(0,12)){
+  library (tidyr)
+  make.italic <- function(x) as.expression(lapply(x, function(y) bquote(italic(.(y)))))
+  plot.formula <- as.formula (paste(y.var,x.var,sep="~"))
+  box.summary <- boxplot (plot.formula, main.df[main.df[,"Gene"] %in% GOI,], plot = FALSE)
+  # get wide data pairs
+  w.data.df <- spread(data.df[,2:5], Timepoint, log2TPM)
+  boxplot (plot.formula,
+           main.df[main.df[,"Gene"] %in% GOI,],
+           boxwex = 0.50, boxlty = 1, whisklty = 1, 
+           staplelwd = 3, medcol = group.colors, frame.plot = FALSE,
+           las = 1, border = group.colors,
+           boxlwd = 0.5, outline = FALSE, 
+           ylim = y.limit, 
+           ylab = y.var.name,
+           xaxt = "n",
+           main = make.italic(GOI))
+  justodd <- function(x) x[ x %% 2 == 1 ]
+  justeven <- function(x) x[ x %% 2 == 0]
+  stripchart(plot.formula, main.df, vertical = TRUE, add = TRUE, at = seq (1, length(box.summary$n)), pch = "o")
+  segments (x0= as.numeric(as.character(factor(as.character(w.data.df[,y.grp]), 
+                                               levels = levels(w.data.df[,y.grp]), 
+                                               labels = justodd (seq (1, length(box.summary$n)))))),
+            x1= as.numeric(as.character(factor(as.character(w.data.df[,y.grp]), 
+                                               levels = levels(w.data.df[,y.grp]), 
+                                               labels = justeven (seq (1, length(box.summary$n)))))),
+            y0=w.data.df[,BL], y1=w.data.df[,TX], lwd = 0.8)
 
+  axis (side = 3, at =  c(0.5,seq (1, length(box.summary$n))), labels = c("n =", box.summary$n), padj = 0.5)
+  axis (side = 1, at = seq(1, length(box.summary$names)), labels = box.summary$names, cex.axis = 0.8,padj = -0.5)
+}
 
 
 
