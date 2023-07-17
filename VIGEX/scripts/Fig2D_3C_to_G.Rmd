@@ -1,0 +1,224 @@
+---
+title: "Fig2D_3C_to_G"
+date: "`r format(Sys.time(), '%Y_%m_%d_%H_%M')`"
+---
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(eval = FALSE)      ## no run
+# knitr::opts_chunk$set(include = FALSE)   ## yes run, no code, no output
+knitr::opts_chunk$set(echo = TRUE)         ## yes run, no code, yes output ( for figures )
+knitr::opts_chunk$set(results = 'hide')    ## yes run, yes code, no output
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+require(tidyverse)
+require(ggplot2)
+'%ni%' <- Negate('%in%')
+# options(scipen = 999)       # decimals
+# options(scipen = 0)         # sci notation
+# options(max.print=999999)
+
+dir.clin = "/path/to/VIGEX/_clin_info"
+
+library(survival)
+library(survminer)
+```
+
+# read in clin_info
+
+```{r, include=FALSE}
+## clin_info
+clin_info = 
+  readxl::read_xlsx(file.path(dir.clin, "VIGEX_INSPIRE_classification_merged_data_23012022CY.xlsx"), sheet = "VIGEX_class_surv") %>% 
+  rename_all(., ~paste0("clin_", .))
+# clin_info
+
+sub.class.df = 
+  readxl::read_xlsx(file.path(dir.clin, "VIGEX_INSPIRE_classification_merged_data_23012022CY.xlsx"), sheet = "survival", na = "NA") %>% 
+  mutate(Clearance_2groups_old = if_else(Clearance_group == "With clearance" | Clearance_group == "No clearance, decrease from baseline", "decrease_ctDNA",
+                                 if_else(Clearance_group == "No clearance, increase from baseline", "increase_ctDNA", Clearance_group))) %>% 
+  mutate(ctDNA_dynamics_2groups = if_else(str_detect(Combined_C3_RECIST_ctDNA, "Increased"), "increase_ctDNA",
+                                  if_else(str_detect(Combined_C3_RECIST_ctDNA, "Decreased"), "decrease_ctDNA", "ERROR"))) %>% 
+  mutate(ctDNA_VIGEX = if_else(ctDNA_dynamics_2groups == "decrease_ctDNA" & VIGEX_Group_2 == "Hot", "decrease_ctDNA__Hot",
+                       if_else(ctDNA_dynamics_2groups == "decrease_ctDNA" & VIGEX_Group_2 == "iCold_Cold", "decrease_ctDNA__iCold_Cold",
+                       if_else(ctDNA_dynamics_2groups == "increase_ctDNA" & VIGEX_Group_2 == "Hot", "increase_ctDNA__Hot",
+                       if_else(ctDNA_dynamics_2groups == "increase_ctDNA" & VIGEX_Group_2 == "iCold_Cold", "increase_ctDNA__iCold_Cold", "NA"))))) %>% 
+  mutate(RECIST_CR_PR = if_else(BEST_OVERALL_RECIST == "CR" | BEST_OVERALL_RECIST == "PR", "CR_PR_yes", "CR_PR_no")) %>% 
+  mutate(VIGEX_Group_2 = factor(VIGEX_Group_2, levels = c("Hot","iCold_Cold")),
+         GENDER = if_else(GENDER == 1, "Male", "Female"),
+         COHORT = factor(COHORT, levels = c("A: Head and Neck", "B: Breast", "C: Ovary", "D: Melanoma", "E: Mixed")),
+         # ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("decrease_ctDNA__Hot", "decrease_ctDNA__iCold_Cold", 
+         #                                              "increase_ctDNA__Hot", "increase_ctDNA__iCold_Cold")))
+         ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("increase_ctDNA__iCold_Cold", 
+                                                      "decrease_ctDNA__Hot", 
+                                                      "decrease_ctDNA__iCold_Cold", 
+                                                      "increase_ctDNA__Hot")))
+sub.class.df
+```
+
+# Fig 2D: VIGEX ~ survival
+
+```{r, fig.width=6, fig.height=4, results='hide'}
+## OS
+VIGEX_OS.plt = 
+  sub.class.df %>% mutate(VIGEX_Group_2 = factor(VIGEX_Group_2, levels = c("iCold_Cold", "Hot"))) %>% 
+  filter(!is.na(VIGEX_Group_2)) %>% 
+  reportRmd::ggkmcif(response=c("OSTIME_Months","OSevent"), cov = "VIGEX_Group_2", 
+                     data = ., HR = F, legend.pos = c(0.7,0.7), pval = F, main = "Overall Survival", returns = T)
+# VIGEX_OS.plt[[1]]
+
+## PFS
+VIGEX_PFS.plt = 
+  sub.class.df %>% mutate(VIGEX_Group_2 = factor(VIGEX_Group_2, levels = c("iCold_Cold", "Hot"))) %>% 
+  filter(!is.na(VIGEX_Group_2)) %>% 
+  reportRmd::ggkmcif(response=c("PFSTIME_Months","PFSevent"), cov = "VIGEX_Group_2", 
+                     data = ., HR = F, legend.pos = c(0.7,0.7), pval = F, main = "Progression-Free Survival", returns = T)
+# VIGEX_PFS.plt[[1]]
+
+# Cairo::CairoPDF("./Fig3D_E.pdf", height = 3, width = 8)
+ggpubr::ggarrange(plotlist = list(VIGEX_OS.plt[[1]]  + theme(plot.margin = margin(l = 21.5, r = 17.5)),
+                                  VIGEX_PFS.plt[[1]] + theme(plot.margin = margin(l = 21.5, r = 17.5)),
+                                  VIGEX_OS.plt[[3]], VIGEX_PFS.plt[[3]]),
+                  ncol = 2, nrow = 2, heights = c(8,1))
+# dev.off()
+```
+
+# Fig 3C: interaction
+
+## 2x2 table
+
+```{r, results='hide'}
+# ```{r, fig.width=6, fig.height=4, results='hide'}
+sub.class.df.noNAs =
+  sub.class.df %>%
+  filter(!is.na(ctDNA_dynamics_2groups) &
+           !is.na(ctDNA_VIGEX) &
+           !is.na(RECIST_CR_PR) &
+           !is.na(`PFS_since_C3 (Months since cycle3)`))
+# sub.class.df2 = sub.class.df.noNAs
+
+clearance_vigex_table =
+  sub.class.df.noNAs %>% 
+  dplyr::group_by(ctDNA_dynamics_2groups, VIGEX_Group_2) %>% 
+  tally(RECIST_CR_PR == "CR_PR_yes") %>% 
+  dplyr::rename("n_CR_PR_yes"="n") %>% 
+  left_join(., sub.class.df.noNAs %>% 
+  dplyr::group_by(ctDNA_dynamics_2groups, VIGEX_Group_2) %>% summarize(n = n()), by=c("ctDNA_dynamics_2groups","VIGEX_Group_2")) %>% 
+  mutate(pctg_CR_PR_yes = (n_CR_PR_yes / n)*100) %>% 
+  dplyr::ungroup()
+clearance_vigex_table
+
+clearance_vigex_table %>% 
+  mutate(ctDNA_dynamics_2groups = gsub("_", " ", ctDNA_dynamics_2groups),
+         VIGEX_Group_2 = gsub("_", " or ", VIGEX_Group_2)) %>% 
+  ggplot(., aes(x=VIGEX_Group_2, y=ctDNA_dynamics_2groups, fill=pctg_CR_PR_yes)) +
+  geom_tile() +
+  # geom_tile(color = "white", height = 0.95, width = 0.95) +
+  geom_text(aes(label = paste0(round(pctg_CR_PR_yes,0), "% (", n_CR_PR_yes, "/", n, ")"))) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 30) +
+  labs(title = "Percentage of CR_PR stratified by\nctDNA clearance and VIGEX groups",
+       x = "VIGEX groups",
+       y = "ctDNA dynamics",
+       fill = "CR_PR%") +
+  theme_minimal()
+
+# ggsave(paste0("./Fig_2x2table.pdf"), device = "pdf", width = 4.3, height = 3, units = "in", useDingbats=F)
+```
+
+# Fig 3D_3E_3F_3G: VIGEX ~ multivariate 
+
+
+```{r, fig.width=8, fig.height=5, results='hide'}
+## OS
+VIGEX_ctDNA_OS.survplt =
+  sub.class.df %>% 
+  mutate(ctDNA_VIGEX = gsub("__", " + ", ctDNA_VIGEX),
+         ctDNA_VIGEX = gsub("_ctDNA", " ctDNA", ctDNA_VIGEX), 
+         ctDNA_VIGEX = gsub("_Cold", " or Cold", ctDNA_VIGEX)) %>% 
+  mutate(ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("increase ctDNA + iCold or Cold", 
+                                                      "decrease ctDNA + Hot", 
+                                                      "decrease ctDNA + iCold or Cold", 
+                                                      "increase ctDNA + Hot"))) %>% 
+  filter(!is.na(ctDNA_VIGEX)) %>% 
+  filter(!is.na(OS_from_cycle3)) %>% 
+  reportRmd::ggkmcif(response=c("OS_from_cycle3","OSevent"), cov = "ctDNA_VIGEX", 
+                     data = ., HR = F, legend.pos = c(0.8,0.8), pval = F, 
+                     # main = "ctDNA and VIGEX groups and OS", 
+                     main = "Overall Survival", 
+                     returns = T)
+# VIGEX_ctDNA_OS.survplt[[1]]
+
+VIGEX_ctDNA_OS.plt =
+  sub.class.df %>% 
+  mutate(ctDNA_VIGEX = gsub("__", "\n+", ctDNA_VIGEX),
+         ctDNA_VIGEX = gsub("_ctDNA", " ctDNA", ctDNA_VIGEX), 
+         ctDNA_VIGEX = gsub("_Cold", " or Cold", ctDNA_VIGEX)) %>% 
+  mutate(ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("increase ctDNA\n+iCold or Cold", 
+                                                      "decrease ctDNA\n+Hot", 
+                                                      "decrease ctDNA\n+iCold or Cold", 
+                                                      "increase ctDNA\n+Hot"))) %>% 
+  filter(!is.na(ctDNA_VIGEX)) %>% 
+  filter(!is.na(OS_from_cycle3)) %>% 
+  ggforest(
+    coxph(Surv(OS_from_cycle3, OSevent) ~ ctDNA_VIGEX + COHORT, data = .) ,
+    data = .,
+    main = "Covariates Hazard Ratio (95% CI) P-value",
+    cpositions = c(0.02, 0.15, 0.35),
+    fontsize = 0.7,
+    refLabel = "reference",
+    noDigits = 2
+  )
+# VIGEX_ctDNA_OS.plt
+
+## PFS
+VIGEX_ctDNA_PFS.survplt =
+  sub.class.df %>% 
+  mutate(ctDNA_VIGEX = gsub("__", " + ", ctDNA_VIGEX),
+         ctDNA_VIGEX = gsub("_ctDNA", " ctDNA", ctDNA_VIGEX), 
+         ctDNA_VIGEX = gsub("_Cold", " or Cold", ctDNA_VIGEX)) %>% 
+  mutate(ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("increase ctDNA + iCold or Cold", 
+                                                      "decrease ctDNA + Hot", 
+                                                      "decrease ctDNA + iCold or Cold", 
+                                                      "increase ctDNA + Hot"))) %>% 
+  filter(!is.na(ctDNA_VIGEX)) %>% 
+  filter(!is.na(OS_from_cycle3)) %>% 
+  reportRmd::ggkmcif(response=c("PFS_from_cycle3","PFSevent"), cov = "ctDNA_VIGEX", 
+                     data = ., pval = F, HR = F, legend.pos = c(0.7,0.7), 
+                     # main = "ctDNA and VIGEX groups and PFS", 
+                     main = "Progression-Free Survival", 
+                     returns = T)
+# VIGEX_ctDNA_PFS.survplt[[1]]
+
+VIGEX_ctDNA_PFS.plt =
+  sub.class.df %>% 
+  mutate(ctDNA_VIGEX = gsub("__", "\n+", ctDNA_VIGEX),
+         ctDNA_VIGEX = gsub("_ctDNA", " ctDNA", ctDNA_VIGEX), 
+         ctDNA_VIGEX = gsub("_Cold", " or Cold", ctDNA_VIGEX)) %>% 
+  mutate(ctDNA_VIGEX = factor(ctDNA_VIGEX, levels = c("increase ctDNA\n+iCold or Cold", 
+                                                      "decrease ctDNA\n+Hot", 
+                                                      "decrease ctDNA\n+iCold or Cold", 
+                                                      "increase ctDNA\n+Hot"))) %>% 
+  filter(!is.na(ctDNA_VIGEX)) %>% 
+  filter(!is.na(OS_from_cycle3)) %>% 
+  ggforest(
+    coxph(Surv(PFS_from_cycle3, PFSevent) ~ ctDNA_VIGEX + COHORT, data = .),
+    data = .,
+    main = "Covariates Hazard Ratio (95% CI) P-value",
+    cpositions = c(0.02, 0.15, 0.35),
+    fontsize = 0.7,
+    refLabel = "reference",
+    noDigits = 2
+  )
+VIGEX_ctDNA_PFS.plt
+
+# Cairo::CairoPDF("./Fig4C_D_E_F.pdf", height = 8, width = 14)
+ggpubr::ggarrange(plotlist = list(VIGEX_ctDNA_OS.survplt[[1]] + theme(plot.margin = margin(l = 50, r = 30)),
+                                  VIGEX_ctDNA_PFS.survplt[[1]] + theme(plot.margin = margin(l = 50, r = 30)),
+                                  # VIGEX_ctDNA_OS.survplt[[3]], VIGEX_ctDNA_PFS.survplt[[3]],
+                                  VIGEX_ctDNA_OS.plt, VIGEX_ctDNA_PFS.plt), ncol = 2, nrow = 2,
+                  heights = c(8,10), labels = c("C", "D", "E", "F"))
+# dev.off()
+```
+
+<br>
+
+# EOF

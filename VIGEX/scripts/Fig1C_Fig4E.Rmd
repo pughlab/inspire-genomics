@@ -1,0 +1,228 @@
+---
+title: "Fig1C_Fig4E"
+date: "`r format(Sys.time(), '%Y_%m_%d_%H_%M')`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+require(tidyverse)
+require(ggplot2)
+'%ni%' <- Negate('%in%')
+
+dir.data = "/path/to/VIGEX/analysis002_INSPIRE_CIBERSORT/data"
+dir.CIBERSORT = "/path/to/immunedeconv/CIBERSORT"
+dir.clin = "/path/to/VIGEX/_clin_info"
+dir.fig = "/path/to/VIGEX/analysis002_INSPIRE_CIBERSORT/figures"
+```
+
+# read in data
+
+## clin
+
+```{r}
+clin_info = 
+  readxl::read_xlsx(file.path(dir.clin, "VIGEX_INSPIRE_classification_merged_data_23012022CY.xlsx"), sheet = "VIGEX_class_surv") %>% 
+  rename_all(., ~paste0("clin_", .))
+
+chr9pCNV = 
+  readxl::read_xlsx(file.path(dir.clin, "VIGEX_INSPIRE_classification_merged_data_23012022CY.xlsx"), sheet = "9p21.3_CNV_status", skip = 1) %>% 
+  rename_all(., ~paste0("clin_", .))
+```
+
+## TPM
+
+```{r}
+INSPIRE.tpm = read.table(file.path(dir.data, "gene-expression-matrix-TPM-final.tsv"), header = T, sep = "\t") %>% rownames_to_column(var="SYMBOL")
+INSPIRE.tpm 
+
+INSPIRE.tpm$SYMBOL %>% unique() %>% length() # [1] 47122
+```
+
+# CIBERSORT_abs
+
+## match SYMBOL to LM22
+
+```{r}
+## get CIBERSORT resource files
+## LM22
+LM22 = read.table(file.path(dir.CIBERSORT, "CIBERSORT_RESOURCES/LM22.txt"), header = T, sep = '\t')
+LM22 %>% dim() # [1] 547  23
+
+## gene_conversions file (11 genes)
+gencode_conversions = read.table(file.path(dir.CIBERSORT, "CIBERSORT-master/data/gencode_conversions.csv"), header = TRUE, sep = ',')
+gencode_conversions
+
+## get matching
+TPM.inLM22 =
+  INSPIRE.tpm %>% 
+  dplyr::filter(SYMBOL %in% LM22$Gene.symbol)
+TPM.inLM22 %>% nrow() # [1] 532 ( was 528 )
+TPM.inLM22
+
+## get conversions
+TPM.10genesConverted =
+  inner_join(INSPIRE.tpm, 
+             gencode_conversions %>% dplyr::filter(library=="gc27"), 
+             by=c("SYMBOL"="gencode")) %>% 
+  dplyr::select(CIBERSORT, everything(), -c(SYMBOL, library)) %>% 
+  rename("SYMBOL"="CIBERSORT")
+TPM.10genesConverted
+
+## 6 genes missing, cannot find on genecard or ALIAS, just make it 0
+setdiff(LM22$Gene.symbol, c(TPM.inLM22$SYMBOL, TPM.10genesConverted$SYMBOL)) %>% cat(., sep=" = \n")# dput()
+# c("GSTT1", "IFNA10", "LILRA3", "LINC00597", "LOC100130100", "LOC126987")
+
+num_samples = colnames(INSPIRE.tpm) %>% str_subset(., "INS.") %>% length()
+num_samples
+TPM.6missing = 
+  data.frame(GSTT1 = rep(0, num_samples),
+             IFNA10 = rep(0, num_samples),
+             LILRA3 = rep(0, num_samples),
+             LINC00597 = rep(0, num_samples),
+             LOC100130100 = rep(0, num_samples),
+             LOC126987 = rep(0, num_samples)) %>% 
+  t() %>% as.data.frame() %>% rownames_to_column(var="SYMBOL")
+colnames(TPM.6missing) = colnames(TPM.inLM22)
+TPM.6missing
+
+TPM.matchLM22 = 
+  bind_rows(TPM.inLM22, TPM.10genesConverted, TPM.6missing) %>% 
+  dplyr::arrange(SYMBOL)
+TPM.matchLM22 %>% nrow() # [1] 547
+TPM.matchLM22 %>% head()
+
+write.table(TPM.matchLM22, 
+            file = file.path(dir.data, "gene_expr_TPM_matchLM22.txt"), 
+            quote = F, sep = '\t', row.names = F)
+```
+
+## ran CIBERSORT on website
+
+https://cibersortx.stanford.edu/runcibersortx.php
+
+- LM22 signature
+- no batch correction
+- no quantile normalization
+- absolute mode
+- 100 permutations
+
+## read in cibersort
+
+```{r}
+## CIBERSORTabs
+inspire_cibersort = 
+  read.table(file.path(dir.data, "CIBERSORTx_Job14_Results.csv"), header = T, sep = ",") %>% 
+  mutate(Mixture = gsub("\\.","-", Mixture)) %>% 
+  dplyr::select(-c(P.value, RMSE, Correlation)) %>% 
+  rename_at(vars(!starts_with("Mixture")), ~paste0("ciber_", .))
+# inspire_cibersort$Mixture %>% length() # [1] 108
+
+inspire_cibersort.ST = 
+  inspire_cibersort %>% 
+  filter(str_detect(Mixture, "-ST")) %>% 
+  mutate(Mixture = gsub("-ST","", Mixture))
+# inspire_cibersort.ST$Mixture %>% length() # [1] 65
+```
+
+# analysis
+
+## help function
+
+```{r}
+give.n <- function(x){
+  return(c(y = mean(x)*1.15, label = length(x))) 
+}
+```
+
+## Fig 1B: CIBERSORT ~ VIGEX 3 groups
+
+```{r}
+clin_info
+## join
+inspire_cibersort.ST.clin_info.VIGEX_Group_3 = 
+  left_join(inspire_cibersort.ST, clin_info, by=c("Mixture"="clin_Patient ID")) %>% 
+  filter(!is.na(clin_VIGEX_Group_3)) %>% 
+  mutate(clin_VIGEX_Group_3 = factor(clin_VIGEX_Group_3, levels = c("Cold", "iCold", "Hot"))) %>% 
+  dplyr::select(Mixture, clin_VIGEX_Group_3, starts_with("ciber_"))
+# inspire_cibersort.ST.clin_info.VIGEX_Group_3 %>% dim() # [1] 63 25
+# inspire_cibersort.ST.clin_info.VIGEX_Group_3$clin_VIGEX_Group_3 %>% table(useNA = "always")
+#  Cold  iCold  Hot
+#     7     15   41
+
+## pivot long
+inspire_cibersort.ST.clin_info.VIGEX_Group_3.long =
+  inspire_cibersort.ST.clin_info.VIGEX_Group_3 %>% 
+  pivot_longer(cols = -c(Mixture, clin_VIGEX_Group_3), names_to = "Cell_type", values_to = "TIL%")
+# inspire_cibersort.ST.clin_info.VIGEX_Group_3.long
+
+## anova_test
+inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova.df =
+  inspire_cibersort.ST.clin_info.VIGEX_Group_3.long %>% 
+  mutate(clin_VIGEX_Group_3 = as.character(clin_VIGEX_Group_3)) %>% 
+  group_by(Cell_type) %>% 
+  rstatix::anova_test(`TIL%` ~ clin_VIGEX_Group_3) %>% 
+  rstatix::adjust_pvalue(method = "BH") %>%
+  rstatix::add_significance() %>% 
+  as_tibble()
+# inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova.df
+
+inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova_sig_cell_types =
+  inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova.df %>% filter(p < 0.1) %>% .$Cell_type
+# inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova_sig_cell_types
+# [1] "ciber_Absolute.score..sig.score." "ciber_B.cells.naive"              "ciber_Macrophages.M1"             "ciber_Macrophages.M2"             "ciber_Monocytes"                 
+# [6] "ciber_NK.cells.activated"         "ciber_T.cells.CD4.memory.resting" "ciber_T.cells.CD4.naive"          "ciber_T.cells.CD8"                "ciber_T.cells.follicular.helper" 
+
+## plot
+inspire_cibersort.ST.clin_info.VIGEX_Group_3.long.plot =
+  inspire_cibersort.ST.clin_info.VIGEX_Group_3.long %>% 
+  # filter(Cell_type %in% inspire_cibersort.ST.clin_info.VIGEX_Group_3.anova_sig_cell_types) %>% 
+  ggplot(aes(x=clin_VIGEX_Group_3, y=`TIL%`, fill=clin_VIGEX_Group_3)) +
+  geom_boxplot(notch=FALSE, outlier.shape = NA) +
+  geom_jitter(shape=16, size=0.3, position=position_jitter(0.2)) +
+  theme_classic() + 
+  stat_summary(fun.data = give.n, geom = "text", fun.y = mean,
+               position = position_dodge(width = 0.75)) +
+  facet_wrap(~ Cell_type, scales = "free_y", nrow = 3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        legend.position = "bottom") +
+  ggpubr::stat_compare_means(method="wilcox", size = 3, comparisons=list(c(1,2), c(2,3), c(1,3))) +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.1))) +
+  labs(title = "inspire_cibersort.ST.clin_info.VIGEX_Group_3.long.plot")
+inspire_cibersort.ST.clin_info.VIGEX_Group_3.long.plot
+
+# ggsave(paste0(dir.fig, "inspire_cibersort.ST.clin_info.VIGEX_Group_3.boxplot.all.pdf"), 
+#        inspire_cibersort.ST.clin_info.VIGEX_Group_3.long.plot,
+#        device = "pdf", width = 14, height = 7, units = "in", useDingbats=F)
+```
+
+## Fig 4E: 9p21.3 loss ~ VIGEX 3 groups
+
+```{r}
+clin_info.chr9pCNV = 
+  left_join(chr9pCNV, clin_info, by=c("clin_PID"="clin_Patient ID"))
+# clin_info.chr9pCNV
+
+test = fisher.test(clin_info.chr9pCNV$`clin_1. CNA.groups`, clin_info.chr9pCNV$clin_VIGEX_Group_3)
+
+library(ggstatsplot)
+
+## VIGEXtype2
+ggstatsplot::ggbarstats(
+  clin_info.chr9pCNV, `clin_1. CNA.groups`, `clin_VIGEX_Group_2`, 
+  label = "both",
+  xlab = "Chromosome 9p21.3 copy number status and VIGEX subtype (iCold/Cold combined)", 
+  legend.title = "9p21.3 CNA",
+  results.subtitle = FALSE,
+  subtitle = paste0(
+    "Fisher's exact test", ", p-value = ",
+    ifelse(test$p.value < 0.001, "< 0.001", round(test$p.value, 3))
+  )
+)
+# ggsave(paste0(dir.fig, "VIGEXtype2_vs_9pCNA.pdf"), device = "pdf", width = 8, height = 6, units = "in", useDingbats=F)
+```
+
+<br>
+
+# EOF
